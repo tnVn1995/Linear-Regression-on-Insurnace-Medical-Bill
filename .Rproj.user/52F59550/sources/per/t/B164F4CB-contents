@@ -1,0 +1,200 @@
+---
+title: "Regresson_FinalProject"
+author: "Tung Nguyen"
+date: "4/15/2020"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r dependencies, echo=FALSE}
+knitr::opts_chunk$set(echo=FALSE, comment=NA)
+library('tidyverse')
+```
+## Data Description
+
+1. Formatted Date : The date that the weather was recorded
+2. Summary: short summary of the weather
+3. Precip Type: Types of weather
+4. Temperature: Temperature in Celsius
+5. Apparent Temperature: Temperature perceived by humans in Celsius
+6. Humidity: The concentration of water vapor in the air
+7. Wind Speed: wind flow speed in km
+8. Wind Bearing: The direction toward which the ind is moving in degrees
+9. Loud Cover: Unknown
+10. Pressure: Air pressure in milibars
+11. Daily Summary: Detailed summary of daily weather
+12. Visibility: The distance one can see in km 
+
+```{r Importing Dataset}
+weather <- read_csv('weatherHistory.csv')
+colnames(weather) <- c('Formatted Date','Summary', 'Precip Type', 'Temperature','Apparent Temperature', 'Humidity', 'Wind Speed', 'Wind Bearing', 'Visibility ', 'Loud Cover', 'Pressure','Daily Summary')
+```
+## Data Exploration
+```{r Exploring}
+head(weather)
+```
+```{r}
+types <- weather %>% 
+    dplyr::summarise_all(class) %>% 
+    tidyr::pivot_longer(cols = everything(), names_to = 'variable', values_to = 'class')
+
+# numeric <- types %>% 
+#     filter()
+types
+```
+There are 12 variables in our dataset. Among them, 4 are categorical while the other 8 are numerical. 
+```{r Missing values}
+map(weather, ~sum(is.na(.)))
+```
+There are no mising values in our dataset. Now let's divide the dataset into numerical and categorical features to analyze them separately. This way if we make mistakes we can always go back to the original data and fix it. 
+
+```{r Filtering numerical and categorical data}
+numeric_vars <- types %>% 
+  filter(class == 'numeric')
+
+categorical_vars <- types %>% 
+  filter(class == 'character')
+```
+### Numerical Data
+```{r Numerical Features}
+print(numeric_vars)
+
+```
+
+```{r Numerical Data}
+numeric <- weather[numeric_vars$variable]
+head(numeric)
+```
+Although Loud Cover variable display discrete values, it looks like it is a categorical variable as values are 0s in the first few examples.
+
+```{r Check type}
+print('The number of values in Loud Cover:')
+unique(numeric$`Loud Cover`)
+```
+So There is only 0 in Loud Cover. Since there is no variance in this variable, I'll eliminate it.
+```{r Remove Loud Cover}
+numeric_vars_1 <- numeric_vars %>% 
+  filter(variable != 'Loud Cover')
+numeric_1 <- weather[numeric_vars_1$variable]
+
+head(numeric_1)
+
+```
+
+### Categorical Data
+```{r Categorical Variables}
+# [TO DO] feature engineering with formatted Date
+categorical_vars1 = categorical_vars$variable[categorical_vars$variable != 'Formatted Date']
+categorical_vars1
+```
+
+
+```{r Categorical Data}
+categorical <- weather[categorical_vars$variable]
+head(categorical)
+```
+## Data Analysis
+Let's take a look at the basic descriptive statistics for our numerical variables
+```{r}
+weather %>%
+  select(numeric_vars_1$variable) %>% 
+  summary()
+```
+Some interesting points can be observed. The descriptive statistics for Temperature and Apparent Temperature are very similar. The distribution of Pressure is skewed heavily right. Let's plot histogram plots of all the variables to gain a better understanding of the variables.
+
+### Numerical Variables
+```{r Numerical Distributions}
+weather %>% 
+  select(numeric_vars_1$variable) %>% 
+  pivot_longer(cols = everything()) %>% 
+  ggplot(aes(value)) +
+  facet_wrap(~ name, scales = 'free') +
+  geom_histogram()
+  
+```
+From the plot above, the distribution of Pressure clusters closely near 1000. I'll note it down here and come back later when tuning the model. The distributions of Apparent Temperature and Temperature are very similar. Let's plot scatterplots of all the variables and check for their linear relationship.
+
+```{r scatter plot}
+weather %>% 
+  select(numeric_vars_1$variable) %>% 
+  pivot_longer(-Temperature) %>% 
+  ggplot(aes(x= value, y = Temperature)) +
+  geom_point() +
+  facet_wrap(~name, scales = 'free') 
+  
+```
+```{r Heatmap Correlation Matrix}
+library(corrplot)
+M <- weather %>% 
+  select(numeric_vars_1$variable) %>% 
+  cor()
+
+corrplot(M, addCoef.col = 'black', tl.srt=90, method='color', diag=FALSE)
+```
+The Apparent Temperature and Temperature have an almost perfectly linear relationship (correlation of 0.99). It makes sense as the temperature humans perceive should be similar to the actual temperature. We'll build models with/without this variable to see the performance. Wind Speed, Pressure and Wind Bearing show little linear relationship with (correlation $\leq$ 0.03). My hypothesis is that these variables won't contribute much to the prediction of temperature.
+```{r}
+numeric_vars_1
+```
+
+```{r Potential sets of numerical variables}
+numeric_vars_potential_1 = numeric_vars_1$variable
+numeric_vars_potential_2 = numeric_vars_potential_1[numeric_vars_potential_1 != 'Apparent Temperature']
+print(paste('Subset 1:',numeric_vars_potential_1))
+print(paste('Subset 2:',numeric_vars_potential_2))
+```
+
+
+### Categorical Variables
+```{r Summary}
+rel_freq <- weather %>%
+  select(Summary) %>% 
+  group_by(Summary) %>% 
+  summarise(n=n()) %>% 
+  arrange(desc(n)) %>% 
+  mutate(Rel_Frequency = n / sum(n)) %>% 
+  mutate(Cum_Rel = cumsum(Rel_Frequency))
+
+print(paste('The number of unique values is', dim(rel_freq)[1]))
+rel_freq %>% 
+  select(Summary, Cum_Rel) %>% 
+  head(7)
+
+```
+We have 27 unique values for the Summary variable. However, 6 of them account for ~98.5% of the total values in Summary. We'll Encode these values with a unique integer and group the rest into -1.
+
+```{r group less frequent values into Other}
+
+weather <- weather %>% 
+  mutate(
+    Summary_Enc = case_when(
+      Summary == 'Foggy' ~ 1,
+      Summary == 'Breezy and Overcast' ~ 2,
+      Summary == 'Overcast' ~ 3,
+      Summary == 'Mostly Cloudy' ~ 4,
+      Summary == 'Partly Cloudy' ~ 5,
+      Summary == 'Clear' ~ 6,
+      TRUE ~ -1
+    )
+  )
+
+```
+
+
+```{r}
+weather
+```
+
+```{r }
+ggplot(data=weather) +
+  geom_bar(mapping = aes(x=Summary_Enc)) + 
+  scale_x_discrete(limits=c('Foggy','breezy and Overcast','Overcast', 'Mostly Cloudy','Partly Cloudy','Clear')) +
+  theme(axis.text.x = element_text(face="bold", color="#993333", angle=45))
+```
+
+```{r}
+ggplot(data=weather, mapping = aes(x=Summary_Enc, y=Temperature)) +
+  geom_boxplot() + 
+  theme(axis.text.x = element_text(face="bold", color="#993333", angle=45))
+```
+

@@ -1,0 +1,25 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1586979101397.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "1754402998",
+    "id" : "3CBF0BD5",
+    "lastKnownWriteTime" : 1586966364,
+    "last_content_update" : 1586966364,
+    "path" : "D:/personal_projects/ML/Supervised/Club_Lending/Loan_Pending.Rmd",
+    "project_path" : null,
+    "properties" : {
+        "cursorPosition" : "8,0",
+        "scrollLine" : "0"
+    },
+    "read_only" : false,
+    "read_only_alternatives" : [
+    ],
+    "relative_order" : 2,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_markdown"
+}

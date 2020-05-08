@@ -1,0 +1,477 @@
+---
+title: "Regression Final Project"
+author: "Tung Nguyen"
+date: "5/5/2020"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+
+# Linear Regression on Medical Insurance Costs 
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, comment=NA)
+```
+
+```{r Loading Dependencies, include=FALSE}
+library(tidyverse)
+library(caret)
+library(MASS)
+```
+## I. Data Description
+
+  This dataset comes from the book Machine Learning with R by Brett Lantz. The data contains medical information and costs billed by health insurance companies. There are 1338 observations and 7 variables in this dataset:
+  
+  1. age: age of primary beneficiary
+  
+  2. sex: insurance contractor gender, female, male
+  
+  3. bmi: Body mass index, providing an understanding of body, weights that are relatively high or low relative to height,
+objective index of body weight (kg / m ^ 2) using the ratio of height to weight, ideally 18.5 to 24.9
+
+  4. children: Number of children covered by health insurance / Number of dependents
+
+  5. smoker: Smoking
+
+  6. region: the beneficiary's residential area in the US, northeast, southeast, southwest, northwest.
+
+  7. charges: Individual medical costs billed by health insurance
+  
+  There are 4 quantitative and 3 categorical variables that each describe a certain feature of the contractor. Below are the first five observations of the data.
+
+```{r Loading data, include=FALSE}
+data <- read_csv('insurance.csv')
+```
+
+```{r}
+head(data)
+```
+  
+  One question of interest is whether insurance costs can be determined from individual features. In our dataset, the insurance costs are the charges variable. It is a continuous variable in terms of dollars. age, bmi and children are numerical features while sex, smoker (whether this person smokes or not) and region are categorical features.
+```{r vars}
+y <- 'charges'
+num_vars <- c('age','bmi','children')
+categ_vars <- c('sex','smoker','region')
+```
+
+## II. Data Exploration
+
+  Below is a summary of the basic statistics for our variables. Looking at the response variable, the minimum value is 1122 while the maximum value is 63770. Most points cluster between 4740 and 16640. This large variance in the response variable indicates that there are potential outliers. The other quantitative variables are reasonably varied. 
+```{r}
+summary(data)
+```
+
+### Scatterplots of Quantitative Variables
+```{r numerical variables}
+data %>% 
+  dplyr:: select(all_of(num_vars), all_of(y)) %>% 
+  pairs() %>% 
+  title('Scatterplots of numerical variables with the response variable')
+  
+
+```
+  
+  The Children variable seems to be a categorical variable because there are only a few values in the variable (1-5). Below is the frequency distribution of children. It confirms that children should be treated as a categorical variable even though it is numerical. 
+
+```{r}
+data %>% 
+  group_by(children) %>% 
+  summarize(count = n())
+```
+  
+  Also from the plot above, age shows a linear relationship with our response, charges, albeit in clusters. bmi also shows a somewhat linear relationship with charges. In addition, bmi and age displays a certain level of correlation. The interaction of these two variables may play an important role in our model.
+
+```{r categorical variables, include=FALSE}
+categ_vars <- c(categ_vars, 'children')
+data %>% 
+  dplyr::select(categ_vars)
+```
+### Boxplots of Categorical Variables
+
+```{r boxplot of sex}
+data %>% 
+  ggplot(aes(sex, charges)) + 
+  geom_boxplot() +
+    labs(title='Boxplot of Sexes for insurance costs')
+
+  
+```
+  
+  The plot above shows the boxplot of variable sex for insurance costs. The median costs for both sexes are pretty equal though there is more variance in insurnace costs for male.
+  
+```{r boxplot of smoker}
+data %>% 
+  ggplot(aes(smoker, charges)) + 
+  geom_boxplot() +
+  labs(title='Boxplot of Smokers for insurance costs')
+  
+
+```
+  
+  There's a clear trend here. Smokers have a much higher median insurance costs in comparison with non-smokers.
+```{r boxplot of region}
+data %>% 
+  ggplot(aes(region, charges)) + 
+  geom_boxplot() +
+  labs(title='Boxplot of region for insurance costs')
+  
+
+```
+  
+  There's not a clear trend for variable region in relation with insurance costs. The insurance costs decreases slightly from east to west, however.
+  
+```{r children}
+data <- data %>% 
+  mutate(children_fct = factor(children))
+data %>%
+  ggplot(aes(children_fct, charges)) +
+  geom_boxplot() +
+  labs(title='Boxplot of children for insurance costs')
+
+```
+  
+  The median insurance costs start high for contractors with zero children then goes down for 1 children contractors. The median costs keep increasing but then decreases when a contractor has 5 children. This could be due to the insurance companies policy to start with a high default cost. They give discount for contractors with children at a small rate then give really high discount for contractors with more than 5 children. One thing to note is that the boxplots show there are many outliers in our categorical variables. The outliers have the potential to influence the model so we'll come back to address this issue if necessary.
+  
+## III. Model
+
+### Methodology
+
+  One interesting question is whether the insurance costs can be determined by individual features. I'll start with a full model that includes all the variables in the data. The full model equation is below.
+  
+  
+  $charges = \beta_{0} + \beta_{1}age + \beta_{2}bmi +  \beta_{3}sex +  \beta_{4}children +  \beta_{5}region +  \beta_{6}smoker$
+      
+
+#### Train and test split
+
+  Before modeling, we need to develop a rigorous approach for model selection.There are many methods for model selection such as AIC, BIC and cross validation, etc. From my own research AIC and cross validation strive to ahieve the same thing in different ways. Since the priority is the predictive power of the model, cross validation is chosen and the matrics are R-squared and RMSE. The greater the R-squared and the smaller the RMSE values, the better the predictive performance of our model is. 
+  
+  The data will be split into train and test sets using a 70 / 30 ratio. Cross validation is performed on the train set (70/30), then the test set will be used to assess the performance of the model.  
+  
+```{r split train and test set}
+set.seed(101)
+# Randomly sample data
+train_index <- sample(1:nrow(data), 0.7*nrow(data))
+test_index <- setdiff(1:nrow(data), train_index)
+
+# Get train and test sets
+X_train <- data[train_index, -3]
+X_test <- data[test_index, -3]
+
+Y_train <- data[train_index, 3]
+Y_test <- data[test_index, 3]
+
+train_data <-  tibble(X_train, Y_train)
+test_data <- tibble(X_test, Y_test)
+# colnames(train_data) <- map_chr(colnames(train_data), str_trim)
+# colnames(test_data) <- map_chr(colnames(test_data), str_trim)
+```
+
+
+  
+### Model 
+```{r}
+
+full.lm <- lm(charges ~  .- children - charges, data=train_data)
+summary(full.lm)
+plot(full.lm)
+
+```
+  
+  The diagnostic plots show a lot of problems with our model. The residual vs fitted values plot show that our residuals are not linear as the residuals are clustered in groups. In addition, the QQ plot shows that our residuals are not approximately normally distributed since the values stray from the diagonal line as it goes further to the right. The scale-location plot also shows non-constant variance. The residuals get bigger as the fitted values get bigger. There are outliers (Some residuals are 4 standard deviations away from 0) in our model though no leverage or high influential points as demonstrated by no visible Cook's distance line. 
+  
+  The summary confirms our earlier analysis. Sex does not play an important role in determining the insurance costs of a contractor as shown by their large p-values. On the other hand, age, bmi and smoker are important factors. Region and children, however, show statistical significance on some levels.
+  
+#### Addressing Violation
+  From the initial diagnosis, the linear regression model built above violates the linearity, normal distribution and constant variance assumptions. A few ways to address these problems are presented below.
+##### Box-Cox transformation
+
+  Box-Cox transformation is one way to address non linearity nad non-normality. The transformation is applied to both the response and predictors where appropriate. The idea is to find a lambda value that maximizes the log-likelihood of the data. The transformation formula is below:
+  $y_{i}^\lambda = \frac{y_{i}^\lambda - 1}{\lambda} if ~\lambda \neq 0~else~log(y_{i})$
+
+###### Transformation of the Response (charges)
+
+```{r include=FALSE}
+library(MASS)
+Box <- boxcox(full.lm)
+Cox = data.frame(Box$x, Box$y)
+Cox2 = Cox[with(Cox, order(-Cox$Box.y)),]
+print('The best lambda is:')
+Cox2[1,1]
+lambda = Cox2[1,'Box.x']
+train_data1 <-  train_data
+train_data1$charges_box = (train_data1$charges ^ lambda - 1) / lambda
+```
+
+```{r }
+full_box.lm <- lm(charges_box ~ . - children - charges - charges_box, data=train_data1)
+summary(full_box.lm)
+plot(full_box.lm)
+```
+  
+  The diagnostic plots again show improvements in our model. Residuals vs Fitted plot shows a curved pattern though the red line is much aligned with the 0 line. The residuals are also scattered around the 0 line more symmetrically. The QQ plot still shows non-normality while the scale-location plot displays improvement but the variance still increases as fitted values get bigger.. 
+  
+  The summary shows an improvement from the non-transformed model as demonstrated by a jump of R-squared adjusted values from 0.7653 to 0.7868. Aside from age, smoker, bmi, most other variables have also become statistically significant (p-values < 0.05).
+  
+###### Transformation of Age
+
+  In the previous analysis, the scatter plots of age vs charges show non-linearity pattern as age is clustered in 3 groups. It is reasonable to apply a transformation to age.
+```{r age box}
+train_data2 = train_data1
+train_data2$age_box = (train_data2$age ^ lambda - 1) / lambda
+full_boxwage.lm <- lm(charges_box ~ . - children - age + age_box  - charges - charges_box, data=train_data2)
+summary(full_boxwage.lm)
+plot(full_boxwage.lm)
+```
+   
+   The summary and diagnostic plots show similar results as compared to the model with only the response variable transformed. In order to ensure the models do not overfit. Cross validation will be run on 3 models to assess their performances.
+
+##### 5 Fold Cross Validation
+
+   
+```{r 5 fold-cross validation}
+set.seed(123) 
+train.control <- trainControl(method = "cv", number = 5)
+# Train the model
+full_cv.lm <- train(charges ~ . - children - charges , data = train_data, method = "lm",
+               trControl = train.control)
+predictions <- full_cv.lm %>% predict(test_data)
+full <- c( R2 = R2(predictions, test_data$charges),
+            RMSE = RMSE(predictions, test_data$charges))
+```
+
+
+```{r}
+set.seed(123) 
+train.control <- trainControl(method = "cv", number = 5)
+# Train the model
+full_boxcv.lm <- train(charges_box ~ . - children - charges - charges_box , data = train_data1, method = "lm",
+               trControl = train.control)
+predictions <- full_boxcv.lm %>% predict(test_data)
+unfold_preds <- ((predictions * lambda) + 1)^ (1 / lambda)
+
+test_data1 <- test_data
+test_data1$charges_box = (test_data1$charges ^ lambda - 1) / lambda
+
+fullbox <- c( R2 = R2(unfold_preds, test_data1$charges),
+            RMSE = RMSE(unfold_preds, test_data1$charges))
+```
+
+
+```{r}
+set.seed(123) 
+train.control <- trainControl(method = "cv", number = 5)
+# Train the model
+full_boxwagecv.lm <- train(charges_box ~ . - children - charges - charges_box - age + age_box, data = train_data2, method = "lm",
+               trControl = train.control)
+test_data2 <- test_data
+test_data2$age_box <- ((test_data1$age ^ lambda) - 1) / lambda
+
+predictions <- full_boxwagecv.lm %>% predict(test_data2)
+unfold_preds1 <- ((predictions * lambda) + 1)^ (1 / lambda)
+
+test_data2$charges_box = (test_data1$charges ^ lambda - 1) / lambda
+
+fullboxwage <- c( R2 = R2(unfold_preds1, test_data2$charges),
+            RMSE = RMSE(unfold_preds1, test_data2$charges))
+```
+
+The table below shows the results of three models using cross validation. Out of three models, the untransformed model perferms the best with the biggest R2 and smallest RMSE . Clearly, our transformation overfits the data.
+   
+```{r}
+as.table(cbind(full, fullbox, fullboxwage))
+```
+
+##### Weighted Least Square (WLS)
+  As discussed above, the non constant variance assumption was violated. One way to address this issue is to put more weights on the non-outliers. Below is fitted model with weighted least square. From now on, when referring to the base model, the model at hand is the first model (non transformed one)
+
+```{r}
+y <- train_data$charges
+res <- full.lm$residuals
+z = log(res^2)
+z.lo=loess(z~y,degree = 2,span=.75)
+loz=predict(z.lo)
+yord=order(y)
+
+# plot(y,z)
+# lines(y[yord],loz[yord],col=2)
+
+sig2hat=exp(loz)
+sighat=sqrt(sig2hat)
+
+
+# plot(y,z)
+# plot(y[yord],sig2hat[yord],col=1)
+# lines(y[yord],sig2hat[yord],col=2)
+
+
+# plot(y[yord],sighat[yord],col=1)
+# lines(y[yord],sighat[yord],col=2)
+
+wlm4=lm(charges~. - children - charges,data=train_data,weights = 1/sighat)
+summary(wlm4)
+plot(wlm4)
+```
+  
+  The model diagnostic plots and summary are pretty similar to the base. The adjusted R-squared is a little bit higher than the non-WLS one. Below is the cv results of the WLS model.
+  
+  
+```{r}
+train.control <- trainControl(method = "cv", number = 5)
+# Train the model
+wlm4_cv.lm <- train(charges ~ . - children - charges, data = train_data, weights=1/sighat, method = "lm",
+               trControl = train.control)
+predictions <- wlm4_cv.lm %>% predict(test_data)
+wlm4_cv <- c( R2 = R2(predictions, test_data$charges),
+            RMSE = RMSE(predictions, test_data$charges))
+```
+
+  
+```{r}
+as.table(cbind(full, wlm4_cv))
+```
+
+  The base model has higher R2 score and lower RMSE scores which signals the base one is still the best model so far.
+  
+## Variable Selection 
+  
+##### Adding non-linear term
+
+  From the scatterplots, age displays behaviour that are not strictly linear. It follows that improvements could be made by adding non-linear terms to the model.
+
+```{r non linear for age}
+age2.lm <- lm(charges ~ . -children - sex -region + I(age^2), data=train_data)
+```
+
+```{r}
+train.control <- trainControl(method = "cv", number = 5)
+# Train the model
+age2_cv.lm <- train(charges ~ . - children - charges + I(age^2), data = train_data, method = "lm",
+               trControl = train.control)
+predictions <- age2_cv.lm %>% predict(test_data)
+age2_cv <- c( R2 = R2(predictions, test_data$charges),
+            RMSE = RMSE(predictions, test_data$charges))
+```
+  
+```{r}
+as.table(cbind(full, age2_cv))
+```
+
+  This time the model with non-linear term in age performs slightly better than the base model.
+Next, variables that are not statistically significant in the base model will be removed to see if improvements could be made.
+
+  
+```{r AIC}
+
+train.control <- trainControl(method = "cv", number = 5)
+# Train the model
+no_sex_cv.lm <- train(charges ~ . - children - sex - charges, data = train_data, method = "lm",
+               trControl = train.control)
+no_chld_cv.lm <- train(charges ~ . - children - children_fct - charges, data = train_data, method = "lm",
+               trControl = train.control)
+no_reg_cv.lm <- train(charges ~ . -children - charges - region, data = train_data, method = "lm",
+               trControl = train.control)
+no_sexreg.lm <- train(charges ~ . -children - charges - region - sex - children_fct, data = train_data, method = "lm",
+               trControl = train.control)
+reduced.lm <- train(charges ~ . -children - charges - region - sex - children_fct, data = train_data, method = "lm",
+               trControl = train.control)
+
+# Make predictions
+prediction_sex <- no_sex_cv.lm %>% predict(test_data)
+prediction_chld <- no_chld_cv.lm %>% predict(test_data)
+prediction_reg <- no_reg_cv.lm %>% predict(test_data)
+prediction_red <- reduced.lm %>% predict(test_data)
+prediction_sexreg <- reduced.lm %>% predict(test_data)
+
+
+no_sex_cv <- c( R2 = R2(prediction_sex, test_data$charges),
+            RMSE = RMSE(prediction_sex, test_data$charges))
+
+no_chld_cv <- c( R2 = R2(prediction_chld, test_data$charges),
+            RMSE = RMSE(prediction_chld, test_data$charges))
+
+no_reg_cv <- c( R2 = R2(prediction_reg, test_data$charges),
+            RMSE = RMSE(prediction_reg, test_data$charges))
+
+red_cv <- c( R2 = R2(prediction_red, test_data$charges),
+            RMSE = RMSE(prediction_red, test_data$charges))
+
+as.table(cbind(full, no_sex_cv, no_chld_cv, no_reg_cv, red_cv))
+```
+
+  From left to right, respectively, the models are base one, model without sex variable, model without children variable, model without region variable and model without sex, children and region variables. The best model is the one without region variable as it has the biggest R2 and smallest RMSE. Although the model without the region variable only performs the best, the model without sex, children and region performs the second best. Their results are only slightly different. Since parsimonious model is the goal of building a model. The red_cv model should be chosen as the next base model. We know from previous analysis that adding non-linear terms led to better performance. Below shows the cv results when removing region variable from the non-linear model.
+
+
+
+
+
+```{r}
+train.control <- trainControl(method = "cv", number = 5)
+# Train the model
+age2_reg.lm <- train(charges ~ . - children - charges - region -sex -children_fct + I(age^2), data = train_data, method = "lm",
+               trControl = train.control)
+
+prediction_noreg <- age2_reg.lm %>% predict(test_data)
+
+age2_noreg_cv <- c( R2 = R2(prediction_noreg, test_data$charges),
+            RMSE = RMSE(prediction_noreg, test_data$charges))
+
+as.table(cbind(full, red_cv, age2_noreg_cv))
+  
+```
+  Although the performance is lightly better for the model with non-linear term, the base model is still preferred as it is most parsimonious and performs almost as well as the one with non-linear term. Next is the results of a model fitted with interactive terms.
+  
+
+```{r}
+train.control <- trainControl(method = "cv", number = 5)
+# Train the model
+age2_inter.lm <- train(charges ~ age*bmi + smoker*age + age*smoker + bmi*smoker, data = train_data, method = "lm",
+               trControl = train.control)
+
+prediction_interactive <- age2_inter.lm %>% predict(test_data)
+
+age2_inter_cv <- c( R2 = R2(prediction_interactive, test_data$charges),
+            RMSE = RMSE(prediction_interactive, test_data$charges))
+
+as.table(cbind(full,age2_noreg_cv, age2_inter_cv))
+```
+  The model performance improves significantly in comparison with the base models. R-square value jumps from ~0.71 to ~0.803 while RMSE decreases from ~6267 to ~5121. Below is the model summary.
+  
+```{r}
+age_inter.lm <- lm(charges ~ age*bmi + smoker*age + age*smoker + bmi*smoker, data = train_data)
+summary(age_inter.lm)
+plot(age_inter.lm)
+```
+  The diagnostic plots show improvements accross assumptions for our model, though these improvements still violate the assumptions.
+  
+  Once the interactive terms were added to the model, most predictors become statistically insignificant. Smoking and age^2 are the only two statistically significant predictors. Since keeping age^2 while discarding age would make no sense in terms of interpretability, we'll eliminate age^2 from the model. Below is the model with only smoker as the predictor. 
+  
+```{r}
+smoker.lm <- lm(charges ~ smoker, data = train_data)
+summary(smoker.lm)
+
+
+
+train.control <- trainControl(method = "cv", number = 5)
+# Train the model
+smoker_cv.lm <- train(charges ~ smoker, data = train_data, method = "lm",
+               trControl = train.control)
+
+prediction_smoker_cv <- smoker_cv.lm %>% predict(test_data)
+
+smoker_cv <- c( R2 = R2(prediction_smoker_cv, test_data$charges),
+            RMSE = RMSE(prediction_smoker_cv, test_data$charges))
+
+smoker_cv
+```
+  Modeling with only smoker as the predictor sees a significant drop from around 0.80 for R2 values and a huge increase in RMSE. These results confirm that our best model is the base model with interactive terms. 
+  
+## Conclusion
+
+  In this analysis, a linear model with all the variables was fitted on the insurance data. The model shows a lot of violations of linear regression assumptions. Non-linearity, non-norammlly distributed 
+  
+  A few approaches were taken to address the issue. Box-Cox transformations were performed on both the response and age variables. The diagnostic plots show no apparent fix of the non-linear assumption. Weighted-Least square method was used to fit on the data to address non-constant variance. The diagnostic plots show an improvement over the base one. However, the performance of the model decreases as showcased by smaller R-squared and RMSE values for both methods. 
+  
+  Once statistically insignificant predictors and non-linear terms were added to the model, there was a big increase in the model's performance. Nonetheless, the increase in performance comes with the cost of less interpretability. Most of the predictors become non-statistically significant. Only smoking and ag^2 are significant. The model confirms that smoking severely affects the insurance costs of an individual. 
+

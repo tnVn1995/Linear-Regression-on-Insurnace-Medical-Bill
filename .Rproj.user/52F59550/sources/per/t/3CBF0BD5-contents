@@ -1,0 +1,51 @@
+---
+title: "Loan_Pending"
+author: "Tung Nguyen"
+date: "4/14/2020"
+output: html_document
+---
+
+```{r dependencies}
+knitr::opts_chunk$set(echo=FALSE, comment=NA)
+library('tidyverse')
+```
+
+## Data Description
+
+```{r}
+data = read.csv('LoanStats3a.csv')
+head(data)
+```
+There are 145 columns (variables) in our dataset. Many columns contain nan values and add little values to the performance of the model. Hence, I'll only pick certain columns that can contribute to the model. Some of them are: amount requested, amount funded, interest rate, loan grade, etc ...
+```{r filter data}
+
+columnsToKeep = c('loan_amnt','funded_amnt','funded_amnt_inv','term','int_rate','installment','grade','sub_grade', 'emp_length','home_ownership','annual_inc', 'verification_status','pymnt_plan','purpose', 'addr_state','dti','delinq_2yrs','earliest_cr_line', 'mths_since_last_delinq','mths_since_last_record', 'open_acc','pub_rec','revol_bal','revol_util', 'total_acc','initial_list_status','out_prncp', 'out_prncp_inv','total_pymnt','total_pymnt_inv', 'total_rec_prncp','total_rec_int','total_rec_late_fee', 'recoveries','collection_recovery_fee','last_pymnt_d', 'last_pymnt_amnt')
+
+filtered_data = data[columnsToKeep]
+head(filtered_data)
+```
+
+```{r}
+colnames(filtered_data)
+```
+
+
+```{r missing values}
+map(filtered_data, ~sum(is.na(.)))
+
+```
+
+```{r}
+ggplot(data = mpg) + 
+  geom_point(mapping = aes(x = displ, y = hwy))
+```
+
+```{r}
+colnames(mpg)
+```
+
+
+
+
+
+

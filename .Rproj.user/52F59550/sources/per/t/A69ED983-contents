@@ -1,0 +1,138 @@
+n=100;
+
+# Let us look at a case with non-constant variance
+x1=runif(n,65,85)
+x2=runif(n,50,70)
+a=1:n
+y=5+2*x1-6*x2+rnorm(n,0,1.3*sqrt((a/5)^4))
+dat4=data.frame(x1,x2,y)
+plot(dat4)
+
+# Fit the correct model and check residuals: Assumptions Incorrect
+lm4=lm(y~x1+x2,data=dat4)
+summary(lm4)
+plot(lm4)
+# We now see problems with the plot of sqrt(ri) vs Fitted AND QPlot
+
+# Now, we will use LOWESS to estimate the variance of the residuals
+res=lm4$residuals
+z=log(res^2)
+
+z.lo=loess(z~y,degree = 2,span=.75)
+loz=predict(z.lo)
+yord=order(y)
+
+
+# Plot the LOWESS estimates of the log-squared residuals
+plot(y,z)
+lines(y[yord],loz[yord],col=2)
+
+# Obtains estimates of the variance for each observation
+sig2hat=exp(loz)
+sighat=sqrt(sig2hat)
+
+# Plot the estimates of the variance of the residuals vs the residuals
+plot(y,z)
+plot(y[yord],sig2hat[yord],col=1)
+lines(y[yord],sig2hat[yord],col=2)
+
+
+# Plot the estimates of the standard deviation of the residuals vs the observed response
+plot(y[yord],sighat[yord],col=1)
+lines(y[yord],sighat[yord],col=2)
+
+
+# Fit the model via WLS
+wlm4=lm(y~x1+x2,data=dat4,weights = 1/sighat)
+summary(wlm4)
+
+# Display the OLS estimates for comparison
+summary(lm4)
+
+
+#######################################################################################
+# Example 2
+
+car.lm <- lm(dist ~ speed, data=cars)
+summary(car.lm)
+plot(car.lm)
+
+res=car.lm$residuals
+z=log(res^2)
+y=cars$dist
+
+z.lo=loess(z~cars$dist,degree = 1,span=.7)
+loz=predict(z.lo)
+yord=order(y)
+
+# Plot the LOWESS estimates of the log-squared residuals
+plot(y,loz)
+lines(y[yord],loz[yord],col=2)
+
+
+# Obtains estimates of the variance for each observation
+sig2hat=exp(loz)
+sighat=sqrt(sig2hat)
+
+# Plot the estimates of the variance of the residuals vs the residuals
+plot(y,sig2hat)
+lines(y[yord],sig2hat[yord],col=2)
+
+# Plot the estimates of the standard deviation of the residuals vs the observed response
+plot(y,sighat)
+lines(y[yord],sighat[yord],col=2)
+
+
+# Fit the model via WLS
+car.wlm=lm(dist ~ speed, data=cars,weights = 1/sighat)
+summary(car.wlm)
+
+# Display the OLS estimates for comparison
+summary(car.lm)
+
+plot(cars$speed,cars$dist)
+abline(car.lm)
+abline(car.wlm,col=2)
+
+
+# Perform a second round of LOWESS to improve the weights
+res=car.wlm$residuals
+z=log(res^2)
+y=cars$dist
+
+z.lo=loess(z~cars$dist,degree = 1,span=.7)
+loz=predict(z.lo)
+yord=order(y)
+
+# Plot the LOWESS estimates of the log-squared residuals
+plot(y,loz)
+lines(y[yord],loz[yord],col=2)
+
+
+# Obtains estimates of the variance for each observation
+sig2hat=exp(loz)
+sighat=sqrt(sig2hat)
+
+
+# Fit the model via WLS
+car2.wlm=lm(dist ~ speed, data=cars,weights = 1/sighat)
+summary(car2.wlm)
+plot(car2.wlm)
+
+# NOTE: the plot function does NOT display the right residuals.
+# It does not take weights into consideration.
+> plot(car2.wlm,1)
+> plot(car2.wlm$fitted.values,weighted.residuals(car2.wlm))
+# The second plot show us the weighted residuals based on transforming the data with the weights.#
+# The first plot show us raw residuals between the observed data and the fitted values.
+# We see that some fitted values are still very far removed from the actual observations, but those
+# observations have very low weights on them.
+
+# Display the OLS estimates for comparison
+summary(car.lm)
+
+plot(cars$speed,cars$dist)
+abline(car.lm)
+abline(car.wlm,col=2)
+abline(car2.wlm,col=3)
+

@@ -1,0 +1,25 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1587761401953.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "2609706536",
+    "id" : "A69ED983",
+    "lastKnownWriteTime" : 1587752718,
+    "last_content_update" : 1587752718,
+    "path" : "D:/WLS (1).R",
+    "project_path" : null,
+    "properties" : {
+        "cursorPosition" : "55,35",
+        "scrollLine" : "32"
+    },
+    "read_only" : false,
+    "read_only_alternatives" : [
+    ],
+    "relative_order" : 3,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_source"
+}

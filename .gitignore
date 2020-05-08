@@ -1,0 +1,11 @@
+# Ignore data files
+Fish.csv
+insurance.zip
+szeged-weather.zip
+WLS.R
+.RData
+.Rhis*
+fish-market.zip
+outliers.R
+final_project.*
+weatherHistory.csv
